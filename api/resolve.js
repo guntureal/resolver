@@ -81,11 +81,7 @@ export default async function handler(req, res) {
       var rp = await fetch(canon, {
         redirect: "follow",
         signal: AbortSignal.timeout(20000),
-        headers: {
-          "User-Agent": BROWSER_UA,
-          "Accept": "text/html,application/xhtml+xml",
-          "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
-        }
+        headers: { "User-Agent": CRAWLER_UA, "Accept": "text/html,application/xhtml+xml" }
       });
       var html = await rp.text();
       var v = extractVideo(html);
