@@ -89,13 +89,17 @@ export default async function handler(req, res) {
     var fetchUrl = canon;
     var fbid = fbidFrom(canon);
     if (fbid && /story\.php/i.test(canon)) fetchUrl = "https://www.facebook.com/photo.php?fbid=" + fbid;
+    var dbg = null;
+    try { dbg = req.query.debug === "1"; } catch (e) {}
     try {
       var rp = await fetch(fetchUrl, {
         redirect: "follow",
         signal: AbortSignal.timeout(20000),
         headers: { "User-Agent": CRAWLER_UA, "Accept": "text/html,application/xhtml+xml" }
       });
+      if (dbg) out._debug = { fetchUrl: fetchUrl, status: rp.status };
       var html = await rp.text();
+      if (dbg) out._debug.htmlSize = html.length;
       var v = extractVideo(html);
       if (v.hd) out.hd = v.hd;
       if (v.sd) out.sd = v.sd;
