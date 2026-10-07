@@ -1,4 +1,4 @@
-// Facebook Resolver Bypass
+// Resolver Facebook Bypass
 var CRAWLER_UA = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
 var BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
 
@@ -17,6 +17,12 @@ function unwrapLoginWall(finalUrl) {
 
 function isPhotoUrl(u) {
   return /\/share\/p\//i.test(u) || /\/photo/i.test(u) || /photo\.php/i.test(u);
+}
+// Bukan video => kemungkinan foto (posts/, share tanpa tipe, dll)
+function maybePhoto(u) {
+  if (isPhotoUrl(u)) return true;
+  if (/\/reel\//i.test(u) || /\/watch/i.test(u) || /\/videos?\//i.test(u) || /\/share\/[rv]\//i.test(u)) return false;
+  return true;
 }
 
 function extractImages(html) {
@@ -69,8 +75,8 @@ export default async function handler(req, res) {
       }
     }
     out.url = canon;
-    // 2. Bila foto: ambil images via browser UA
-    if (isPhotoUrl(canon)) {
+    // 2. Bila kemungkinan foto: ambil images via browser UA
+    if (maybePhoto(canon)) {
       try {
         var rp = await fetch(canon, {
           redirect: "follow",
