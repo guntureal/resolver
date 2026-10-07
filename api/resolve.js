@@ -20,15 +20,23 @@ export default async function handler(req, res) {
     });
     var html = await r.text();
     var images = [];
-    // pola: "ID":"https:\/\/scontent..."
-    var re = /"(\d+)":"(https:\\\/\\\/scontent[^"]+)"/g, m;
-    while ((m = re.exec(html)) && images.length < 20) {
-      var u = m[2].replace(/\\\//g, "/");
-      // filter: hanya gambar konten, bukan ikon/statis
-      if (/scontent/i.test(u) && !/rsrc\.php/i.test(u) && images.indexOf(u) < 0) {
-        images.push(u);
-      }
+    function addUrl(u) {
+      if (!u) return;
+      u = u.replace(/\\\//g, "/").replace(/\\u00253A/g, ":").replace(/\\u00252F/g, "/");
+      if (!/^https:\/\/scontent/i.test(u)) return;
+      if (/rsrc\.php/i.test(u)) return;
+      if (images.indexOf(u) < 0 && images.length < 20) images.push(u);
     }
+    var m;
+    // pola 1: "ID":"https:\/\/scontent..."
+    var re1 = /"(\d{8,})"\s*:\s*"(https:[^"]*scontent[^"]*)"/g;
+    while ((m = re1.exec(html))) addUrl(m[2]);
+    // pola 2: URL scontent langsung (escape maupun tidak)
+    var re2 = /https:(?:\\\/){2}scontent[^"\\\s]{10,200}/g;
+    while ((m = re2.exec(html))) addUrl(m[0]);
+    // pola 3: og:image bila scontent
+    var re3 = /<meta[^>]+property="og:image"[^>]+content="([^"]+)"/gi;
+    while ((m = re3.exec(html))) addUrl(m[1]);
     if (images.length) {
       res.json({ images: images });
     } else {
