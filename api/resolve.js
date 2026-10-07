@@ -1,67 +1,71 @@
-// Resolver Facebook Bypass
+// Facebook Resolver Bypass
 var CRAWLER_UA = "facebookexternalhit/1.1 (+http://www.facebook.com/externalhit_uatext.php)";
 var BROWSER_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36";
-
-function unwrapLoginWall(finalUrl) {
+function unwrapLoginWall(u) {
   var p;
-  try { p = new URL(finalUrl); } catch (e) { return finalUrl; }
-  if (!/^\/(?:accounts\/)?login\/?$/.test(p.pathname)) return finalUrl;
+  try { p = new URL(u); } catch (e) { return u; }
+  if (!/^\/(?:accounts\/)?login\/?$/.test(p.pathname)) return u;
   var nx = p.searchParams.get("next");
-  if (!nx) return finalUrl;
+  if (!nx) return u;
   if (nx.charAt(0) === "/") return p.origin + nx;
-  try {
-    var a = new URL(nx);
-    return a.origin === p.origin ? a.toString() : finalUrl;
-  } catch (e) { return finalUrl; }
+  try { var a = new URL(nx); return a.origin === p.origin ? a.toString() : u; } catch (e) { return u; }
 }
-
 function isPhotoUrl(u) {
   return /\/share\/p\//i.test(u) || /\/photo/i.test(u) || /photo\.php/i.test(u);
 }
-// Bukan video => kemungkinan foto (posts/, share tanpa tipe, dll)
 function maybePhoto(u) {
   if (isPhotoUrl(u)) return true;
   if (/\/reel\//i.test(u) || /\/watch/i.test(u) || /\/videos?\//i.test(u) || /\/share\/[rv]\//i.test(u)) return false;
   return true;
 }
-
-function extractImages(html) {
-  var images = [];
+function unesc(s) {
+  try { return JSON.parse('"' + s + '"'); }
+  catch (e) { return String(s).replace(/\\\//g, "/"); }
+}
+function grab(h, k) {
+  var m = h.match(new RegExp('"' + k + '"\\s*:\\s*"((?:[^"\\\\]|\\\\.)*)"'));
+  return m ? unesc(m[1]) : "";
+}
+function extractVideo(h) {
+  var hd = grab(h, "hd_src") || grab(h, "playable_url_quality_hd");
+  var sd = grab(h, "sd_src") || grab(h, "playable_url");
+  return { hd: hd, sd: (sd && sd !== hd ? sd : "") };
+}
+function extractImages(h) {
+  var o = [];
   function add(u) {
     if (!u) return;
     u = u.replace(/\\\//g, "/");
     if (!/^https:\/\/scontent/i.test(u)) return;
     if (/rsrc\.php/i.test(u)) return;
-    if (images.indexOf(u) < 0 && images.length < 20) images.push(u);
+    if (o.indexOf(u) < 0 && o.length < 20) o.push(u);
   }
   var m;
-  var re1 = /"(\d{8,})"\s*:\s*"(https:[^"]*scontent[^"]*)"/g;
-  while ((m = re1.exec(html))) add(m[2]);
-  if (!images.length) {
-    var re2 = /https:(?:\\\/){2}scontent[^"\\\s]{10,200}/g;
-    while ((m = re2.exec(html))) add(m[0]);
+  var r1 = /"(\d{8,})"\s*:\s*"(https:[^"]*scontent[^"]*)"/g;
+  while ((m = r1.exec(h))) add(m[2]);
+  if (!o.length) {
+    var r2 = /https:(?:\\\/){2}scontent[^"\\\s]{10,200}/g;
+    while ((m = r2.exec(h))) add(m[0]);
   }
-  if (!images.length) {
-    var re3 = /<meta[^>]+property="og:image"[^>]+content="([^"]+)"/gi;
-    while ((m = re3.exec(html))) add(m[1]);
+  if (!o.length) {
+    var r3 = /<meta[^>]+property="og:image"[^>]+content="([^"]+)"/gi;
+    while ((m = r3.exec(h))) add(m[1]);
   }
-  return images;
+  return o;
 }
-
 export default async function handler(req, res) {
-  var target = "";
-  try { target = (req.query.url || "").trim(); } catch (e) {}
-  if (!target || !/(facebook\.com|fb\.watch)/i.test(target)) {
+  var t = "";
+  try { t = (req.query.url || "").trim(); } catch (e) {}
+  if (!t || !/(facebook\.com|fb\.watch)/i.test(t)) {
     res.status(400).json({ error: "URL tidak valid" });
     return;
   }
   var out = {};
   try {
-    // 1. Resolve share URL via crawler UA
-    var isShare = /\/share\//i.test(target) || /fb\.watch\//i.test(target);
-    var canon = target;
+    var isShare = /\/share\//i.test(t) || /fb\.watch\//i.test(t);
+    var canon = t;
     if (isShare) {
-      var r = await fetch(target, {
+      var r = await fetch(t, {
         redirect: "follow",
         signal: AbortSignal.timeout(15000),
         headers: { "User-Agent": CRAWLER_UA, "Accept": "text/html,application/xhtml+xml" }
@@ -70,28 +74,28 @@ export default async function handler(req, res) {
       var fin = "";
       try { fin = r.url || ""; } catch (e) {}
       fin = unwrapLoginWall(fin);
-      if (fin && !/\/share\//i.test(fin) && !/fb\.watch\//i.test(fin) && /(facebook\.com|fb\.watch)/i.test(fin)) {
-        canon = fin;
-      }
+      if (fin && !/\/share\//i.test(fin) && !/fb\.watch\//i.test(fin) && /(facebook\.com|fb\.watch)/i.test(fin)) canon = fin;
     }
     out.url = canon;
-    // 2. Bila kemungkinan foto: ambil images via browser UA
-    if (maybePhoto(canon)) {
-      try {
-        var rp = await fetch(canon, {
-          redirect: "follow",
-          signal: AbortSignal.timeout(20000),
-          headers: {
-            "User-Agent": BROWSER_UA,
-            "Accept": "text/html,application/xhtml+xml",
-            "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
-          }
-        });
-        var html = await rp.text();
+    try {
+      var rp = await fetch(canon, {
+        redirect: "follow",
+        signal: AbortSignal.timeout(20000),
+        headers: {
+          "User-Agent": BROWSER_UA,
+          "Accept": "text/html,application/xhtml+xml",
+          "Accept-Language": "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7"
+        }
+      });
+      var html = await rp.text();
+      var v = extractVideo(html);
+      if (v.hd) out.hd = v.hd;
+      if (v.sd) out.sd = v.sd;
+      if (maybePhoto(canon)) {
         var imgs = extractImages(html);
         if (imgs.length) out.images = imgs;
-      } catch (e) {}
-    }
+      }
+    } catch (e) {}
     if (!out.url) {
       res.status(422).json({ error: "Tidak bisa resolve URL" });
       return;
