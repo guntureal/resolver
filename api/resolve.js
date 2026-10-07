@@ -99,7 +99,13 @@ export default async function handler(req, res) {
       });
       if (dbg) out._debug = { fetchUrl: fetchUrl, status: rp.status };
       var html = await rp.text();
-      if (dbg) out._debug.htmlSize = html.length;
+      if (dbg) {
+        out._debug.htmlSize = html.length;
+        out._debug.scontentCount = (html.match(/scontent/gi) || []).length;
+        out._debug.lookasideCount = (html.match(/lookaside/gi) || []).length;
+        var m0 = html.match(/"(\d{8,})"\s*:\s*"(https:[^"]*scontent[^"]*)"/);
+        out._debug.sample = m0 ? m0[0].slice(0, 120) : html.slice(html.indexOf("scontent") - 40, html.indexOf("scontent") + 80);
+      }
       var v = extractVideo(html);
       if (v.hd) out.hd = v.hd;
       if (v.sd) out.sd = v.sd;
