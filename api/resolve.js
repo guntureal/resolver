@@ -13,6 +13,15 @@ function unwrapLoginWall(u) {
 function isPhotoUrl(u) {
   return /\/share\/p\//i.test(u) || /\/photo/i.test(u) || /photo\.php/i.test(u);
 }
+function fbidFrom(u) {
+  var m;
+  try {
+    var p = new URL(u);
+    m = p.searchParams.get("story_fbid") || p.searchParams.get("fbid");
+    if (m && /^\d+$/.test(m)) return m;
+  } catch (e) {}
+  return "";
+}
 function maybePhoto(u) {
   if (isPhotoUrl(u)) return true;
   if (/\/reel\//i.test(u) || /\/watch/i.test(u) || /\/videos?\//i.test(u) || /\/share\/[rv]\//i.test(u)) return false;
@@ -77,8 +86,11 @@ export default async function handler(req, res) {
       if (fin && !/\/share\//i.test(fin) && !/fb\.watch\//i.test(fin) && /(facebook\.com|fb\.watch)/i.test(fin)) canon = fin;
     }
     out.url = canon;
+    var fetchUrl = canon;
+    var fbid = fbidFrom(canon);
+    if (fbid && /story\.php/i.test(canon)) fetchUrl = "https://www.facebook.com/photo.php?fbid=" + fbid;
     try {
-      var rp = await fetch(canon, {
+      var rp = await fetch(fetchUrl, {
         redirect: "follow",
         signal: AbortSignal.timeout(20000),
         headers: { "User-Agent": CRAWLER_UA, "Accept": "text/html,application/xhtml+xml" }
