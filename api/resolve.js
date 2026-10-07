@@ -69,6 +69,14 @@ export default async function handler(req, res) {
     res.status(400).json({ error: "URL tidak valid" });
     return;
   }
+  var CK = "";
+  try { CK = process.env.FB_COOKIE || ""; } catch (e) {}
+  function fh(ua) {
+    var h = { "User-Agent": ua, "Accept": "text/html,application/xhtml+xml" };
+    if (ua === CRAWLER_UA) h["Accept-Language"] = "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7";
+    if (CK) h["Cookie"] = CK;
+    return h;
+  }
   var out = {};
   try {
     var isShare = /\/share\//i.test(t) || /fb\.watch\//i.test(t);
@@ -77,7 +85,7 @@ export default async function handler(req, res) {
       var r = await fetch(t, {
         redirect: "follow",
         signal: AbortSignal.timeout(15000),
-        headers: { "User-Agent": CRAWLER_UA, "Accept": "text/html,application/xhtml+xml" }
+        headers: fh(CRAWLER_UA)
       });
       try { await r.arrayBuffer(); } catch (e) {}
       var fin = "";
@@ -89,23 +97,13 @@ export default async function handler(req, res) {
     var fetchUrl = canon;
     var fbid = fbidFrom(canon);
     if (fbid && /story\.php/i.test(canon)) fetchUrl = "https://www.facebook.com/photo.php?fbid=" + fbid;
-    var dbg = null;
-    try { dbg = req.query.debug === "1"; } catch (e) {}
     try {
       var rp = await fetch(fetchUrl, {
         redirect: "follow",
         signal: AbortSignal.timeout(20000),
-        headers: { "User-Agent": CRAWLER_UA, "Accept": "text/html,application/xhtml+xml" }
+        headers: fh(CRAWLER_UA)
       });
-      if (dbg) out._debug = { fetchUrl: fetchUrl, status: rp.status };
       var html = await rp.text();
-      if (dbg) {
-        out._debug.htmlSize = html.length;
-        out._debug.scontentCount = (html.match(/scontent/gi) || []).length;
-        out._debug.lookasideCount = (html.match(/lookaside/gi) || []).length;
-        var m0 = html.match(/"(\d{8,})"\s*:\s*"(https:[^"]*scontent[^"]*)"/);
-        out._debug.sample = m0 ? m0[0].slice(0, 120) : html.slice(html.indexOf("scontent") - 40, html.indexOf("scontent") + 80);
-      }
       var v = extractVideo(html);
       if (v.hd) out.hd = v.hd;
       if (v.sd) out.sd = v.sd;
