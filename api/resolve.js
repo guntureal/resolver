@@ -13,20 +13,6 @@ function unwrapLoginWall(u) {
 function isPhotoUrl(u) {
   return /\/share\/p\//i.test(u) || /\/photo/i.test(u) || /photo\.php/i.test(u);
 }
-function fbidFrom(u) {
-  var m;
-  try {
-    var p = new URL(u);
-    m = p.searchParams.get("story_fbid") || p.searchParams.get("fbid");
-    if (m && /^\d+$/.test(m)) return m;
-  } catch (e) {}
-  return "";
-}
-function maybePhoto(u) {
-  if (isPhotoUrl(u)) return true;
-  if (/\/reel\//i.test(u) || /\/watch/i.test(u) || /\/videos?\//i.test(u) || /\/share\/[rv]\//i.test(u)) return false;
-  return true;
-}
 function unesc(s) {
   try { return JSON.parse('"' + s + '"'); }
   catch (e) { return String(s).replace(/\\\//g, "/"); }
@@ -39,28 +25,6 @@ function extractVideo(h) {
   var hd = grab(h, "hd_src") || grab(h, "playable_url_quality_hd");
   var sd = grab(h, "sd_src") || grab(h, "playable_url");
   return { hd: hd, sd: (sd && sd !== hd ? sd : "") };
-}
-function extractImages(h) {
-  var o = [];
-  function add(u) {
-    if (!u) return;
-    u = u.replace(/\\\//g, "/");
-    if (!/^https:\/\/scontent/i.test(u)) return;
-    if (/rsrc\.php/i.test(u)) return;
-    if (o.indexOf(u) < 0 && o.length < 20) o.push(u);
-  }
-  var m;
-  var r1 = /"(\d{8,})"\s*:\s*"(https:[^"]*scontent[^"]*)"/g;
-  while ((m = r1.exec(h))) add(m[2]);
-  if (!o.length) {
-    var r2 = /https:(?:\\\/){2}scontent[^"\\\s]{10,200}/g;
-    while ((m = r2.exec(h))) add(m[0]);
-  }
-  if (!o.length) {
-    var r3 = /<meta[^>]+property="og:image"[^>]+content="([^"]+)"/gi;
-    while ((m = r3.exec(h))) add(m[1]);
-  }
-  return o;
 }
 export default async function handler(req, res) {
   var t = "";
@@ -94,11 +58,9 @@ export default async function handler(req, res) {
       if (fin && !/\/share\//i.test(fin) && !/fb\.watch\//i.test(fin) && /(facebook\.com|fb\.watch)/i.test(fin)) canon = fin;
     }
     out.url = canon;
-    var fetchUrl = canon;
-    var fbid = fbidFrom(canon);
-    if (fbid && /story\.php/i.test(canon)) fetchUrl = "https://www.facebook.com/photo.php?fbid=" + fbid;
+
     try {
-      var rp = await fetch(fetchUrl, {
+      var rp = await fetch(canon, {
         redirect: "follow",
         signal: AbortSignal.timeout(20000),
         headers: fh(CRAWLER_UA)
@@ -107,10 +69,7 @@ export default async function handler(req, res) {
       var v = extractVideo(html);
       if (v.hd) out.hd = v.hd;
       if (v.sd) out.sd = v.sd;
-      if (maybePhoto(canon)) {
-        var imgs = extractImages(html);
-        if (imgs.length) out.images = imgs;
-      }
+
     } catch (e) {}
     if (!out.url) {
       res.status(422).json({ error: "Tidak bisa resolve URL" });
