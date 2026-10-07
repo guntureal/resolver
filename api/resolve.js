@@ -33,12 +33,9 @@ export default async function handler(req, res) {
     res.status(400).json({ error: "URL tidak valid" });
     return;
   }
-  var CK = "";
-  try { CK = process.env.FB_COOKIE || ""; } catch (e) {}
   function fh(ua) {
     var h = { "User-Agent": ua, "Accept": "text/html,application/xhtml+xml" };
     if (ua === CRAWLER_UA) h["Accept-Language"] = "id-ID,id;q=0.9,en-US;q=0.8,en;q=0.7";
-    if (CK) h["Cookie"] = CK;
     return h;
   }
   var out = {};
